@@ -196,7 +196,7 @@ def portfolio_vol(weights, covmat):
     return (weights.T @ covmat @ weights) ** 0.5
 
 
-def plot_ef2(n_points, er, cov, style):
+def plot_ef2(n_points, er, cov, style='.-'):
     '''
     plots the two-asset Eifficient Frontier
     '''
@@ -208,4 +208,45 @@ def plot_ef2(n_points, er, cov, style):
     ef = pd.DataFrame({'Returns': rets, 'Volatility': vols})
     return ef.plot.line(x='Volatility', y='Returns', style=style)
     
-    
+from scipy.optimize import minimize    
+
+def minimze_vol(target_return, er, cov):
+    '''
+    target_return -> W
+    '''
+    n = er.shape[0]
+    init_guess = np.repeat(1/n, n)
+    bounds = ((0.0, 1.0), ) * n
+    return_is_target = {
+        'type': 'eq',
+        'args': (er,), 
+        'fun': lambda weights, er: target_return - portfolio_return(weights, er) # target_is_met
+    }
+    weights_sum_to_1 = {
+        'type': 'eq',
+        'fun': lambda weights: np.sum(weights) - 1
+    }
+    results = minimize(portfolio_vol, init_guess, args=(cov, ), method='SLSQP',
+                      options={'disp':False},
+                      constraints=(return_is_target, weights_sum_to_1), bounds=bounds)
+    return results.x
+
+
+def optimal_weights(n_points, er, cov):
+    '''
+    --> list of weights to run the optimizer on to minimize the vol
+    '''
+    target_rs = np.linspace(er.min(), er.max(), n_points)
+    weights = [minimze_vol(target_return, er, cov) for target_return in target_rs]
+    return weights
+
+
+def plot_efn(n_points, er, cov, style='.-'):
+    '''
+    plots the n-asset Eifficient Frontier
+    '''
+    weights = optimal_weights(n_points, er, cov)
+    rets = [portfolio_return(w, er) for w in weights]
+    vols = [portfolio_vol(w, cov) for w in weights]
+    ef = pd.DataFrame({'Returns': rets, 'Volatility': vols})
+    return ef.plot.line(x='Volatility', y='Returns', style=style)
